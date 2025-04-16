@@ -1,8 +1,9 @@
 from typing import Annotated
+# from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, Path
 from starlette import status
-from models import Todos, Users  # Assuming you have a User model defined
+from models import Todos
 from database import SessionLocal
 from .auth import get_current_user
 
@@ -40,11 +41,3 @@ async def delete_todo(user: user_dependency, db: db_dependency, todo_id: int = P
         raise HTTPException(status_code=404, detail='Todo not found.')
     db.query(Todos).filter(Todos.id == todo_id).delete()
     db.commit()
-
-
-@router.get("/users", status_code=status.HTTP_200_OK)
-async def get_users(user: user_dependency, db: db_dependency):
-    # Ensure only admin users have access to the list of all users
-    if user is None or user.get('user_role') != 'admin':
-        raise HTTPException(status_code=401, detail='Authentication Failed')
-    return db.query(Users).all()
