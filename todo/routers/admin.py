@@ -2,8 +2,8 @@ from typing import Annotated
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, HTTPException, Path
 from starlette import status
-from models import Todos, Users  # Assuming you have a User model defined
-from database import SessionLocal
+from ..models import Todos, Users  # Assuming you have a User model defined
+from ..database import SessionLocal
 from .auth import get_current_user
 
 router = APIRouter(
@@ -48,3 +48,19 @@ async def get_users(user: user_dependency, db: db_dependency):
     if user is None or user.get('user_role') != 'admin':
         raise HTTPException(status_code=401, detail='Authentication Failed')
     return db.query(Users).all()
+
+
+@router.get("/todo/{todo_id}", status_code=status.HTTP_200_OK)
+async def read_one_todo(
+    user: user_dependency,
+    db: db_dependency,
+    todo_id: int = Path(gt=0),
+):
+    if user is None or user.get("user_role") != "admin":
+        raise HTTPException(status_code=401, detail="Authentication Failed")
+
+    todo = db.query(Todos).filter(Todos.id == todo_id).first()
+    if todo is None:
+        raise HTTPException(status_code=404, detail="Todo not found.")
+
+    return todo
