@@ -1,77 +1,17 @@
 # todo/test/test_todos.py
-import pytest
-from fastapi.testclient import TestClient
-from fastapi import status
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Build an isolated test engine / SessionLocal
-# ──────────────────────────────────────────────────────────────────────────────
-TEST_ENGINE = create_engine(
-    "sqlite:///./testdb.db",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,              # single connection for whole test run
+from todo.models import Todos
+from .conftest import (
+    TestingSessionLocal,
+    override_get_db,
+    override_get_current_user,
+    client,
+    app,
 )
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Patch todo.database *before* FastAPI and routers import it
-# ──────────────────────────────────────────────────────────────────────────────
-import todo.database as _db                              # noqa: E402  (import after TEST_ENGINE)
-_db.engine = TEST_ENGINE
-_db.SessionLocal = TestingSessionLocal
-_db.Base.metadata.create_all(bind=TEST_ENGINE)           # ensure tables
-
-# Now that the database module is patched, import the rest of the app
-from todo.main import app                                # noqa: E402 This imports all the routers from main.py
+from fastapi import status
 from todo.routers.todos import get_db, get_current_user  # noqa: E402
-from todo.models import Todos                            # noqa: E402
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Dependency overrides
-# ──────────────────────────────────────────────────────────────────────────────
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def override_get_current_user():
-    return {"username": "denis", "id": 1, "user_role": "admin"}
-
 
 app.dependency_overrides[get_db] = override_get_db
 app.dependency_overrides[get_current_user] = override_get_current_user
-client = TestClient(app)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Fixture: start every test with a clean table and one known row
-# ──────────────────────────────────────────────────────────────────────────────
-@pytest.fixture(autouse=True)
-def test_todo():
-    with TEST_ENGINE.connect() as conn:
-        conn.execute(text("DELETE FROM todos;"))
-        conn.commit()
-
-    db = TestingSessionLocal()
-    todo = Todos(
-        title="Learn to code!",
-        description="Need to learn everyday!",
-        priority=5,
-        complete=False,
-        owner_id=1,
-    )
-    db.add(todo)
-    db.commit()
-    db.refresh(todo)
-    yield todo
-    db.close()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
