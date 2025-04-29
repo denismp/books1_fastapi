@@ -1,0 +1,50 @@
+{% include 'layout.html' %}
+
+<div class="container">
+  <div class="card">
+    <div class="card-header">Login</div>
+    <div class="card-body">
+      <form
+        id="loginForm"
+        action="/auth/token"
+        method="post"
+        autocomplete="off"
+      >
+        <!-- 1) Dummy fields to “catch” the browser autofill -->
+        <input type="text"     name="fakeusernameremembered" style="display:none">
+        <input type="password" name="fakepasswordremembered"   style="display:none">
+
+        <!-- 2) Your real username field -->
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input
+            id="username"
+            type="text"
+            class="form-control"
+            name="username_real"
+            autocomplete="username"
+            required
+          >
+        </div>
+
+        <!-- 3) Your real password field -->
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            class="form-control"
+            name="password_real"
+            autocomplete="new-password"
+            required
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary">Login</button>
+      </form>
+    </div>
+    <div class="card-footer text-muted">
+      <a href="/auth/register-page">Register?</a>
+    </div>
+  </div>
+</div>
