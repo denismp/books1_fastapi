@@ -2,9 +2,8 @@
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path as PathParam, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from starlette import status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -13,17 +12,10 @@ from ..database import SessionLocal
 from ..models import Todos
 from .auth import get_current_user
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Router & Templates setup
-# ──────────────────────────────────────────────────────────────────────────────
 router = APIRouter(
     prefix="/todos",
     tags=["todos"],
 )
-
-# Compute path to templates directory next to the 'todo' package
-HERE = Path(__file__).parent.parent
-# templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Dependencies
@@ -53,26 +45,20 @@ class TodoRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Page Routes
+# Page Routes (lazy-load Jinja2Templates)
 # ──────────────────────────────────────────────────────────────────────────────
-# @router.get("/todo-page", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
-# async def render_todo_page(request: Request):
-#     """Render the todo.html template."""
-#     return templates.TemplateResponse(
-#         "todo.html",
-#         {"request": request},
-#     )
-# Remove this top-level initialization
-# templates = Jinja2Templates(directory=str(HERE / "templates"))
-
-@router.get("/todo-page", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+@router.get(
+    "/todo-page",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def render_todo_page(request: Request):
     """Render the todo.html template."""
+    from fastapi.templating import Jinja2Templates
 
-    # ✅ Lazy-load Jinja2Templates inside the function
-    # from fastapi.templating import Jinja2Templates
-    templates = Jinja2Templates(directory=str(HERE / "templates"))
-
+    templates = Jinja2Templates(
+        directory=str(Path(__file__).parent.parent / "templates")
+    )
     return templates.TemplateResponse("todo.html", {"request": request})
 
 
@@ -90,7 +76,7 @@ async def read_all(user: user_dependency, db: db_dependency):
 async def read_todo(
     user: user_dependency,
     db: db_dependency,
-    todo_id: int = PathParam(gt=0),
+    todo_id: int,
 ):
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -115,7 +101,6 @@ async def create_todo(
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     todo_model = Todos(**todo_request.model_dump(), owner_id=user.get("id"))
-
     db.add(todo_model)
     db.commit()
     return {"detail": "Todo created."}
@@ -126,7 +111,7 @@ async def update_todo(
     user: user_dependency,
     db: db_dependency,
     todo_request: TodoRequest,
-    todo_id: int = PathParam(gt=0),
+    todo_id: int,
 ):
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
@@ -144,7 +129,6 @@ async def update_todo(
     todo_model.description = todo_request.description
     todo_model.priority = todo_request.priority
     todo_model.complete = todo_request.complete
-
     db.commit()
 
 
@@ -152,7 +136,7 @@ async def update_todo(
 async def delete_todo(
     user: user_dependency,
     db: db_dependency,
-    todo_id: int = PathParam(gt=0),
+    todo_id: int,
 ):
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
