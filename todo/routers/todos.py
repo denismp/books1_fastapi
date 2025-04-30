@@ -23,7 +23,7 @@ router = APIRouter(
 
 # Compute path to templates directory next to the 'todo' package
 HERE = Path(__file__).parent.parent
-templates = Jinja2Templates(directory=str(HERE / "templates"))
+# templates = Jinja2Templates(directory=str(HERE / "templates"))
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Dependencies
@@ -55,13 +55,25 @@ class TodoRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────────
 # Page Routes
 # ──────────────────────────────────────────────────────────────────────────────
+# @router.get("/todo-page", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
+# async def render_todo_page(request: Request):
+#     """Render the todo.html template."""
+#     return templates.TemplateResponse(
+#         "todo.html",
+#         {"request": request},
+#     )
+# Remove this top-level initialization
+# templates = Jinja2Templates(directory=str(HERE / "templates"))
+
 @router.get("/todo-page", response_class=HTMLResponse, status_code=status.HTTP_200_OK)
 async def render_todo_page(request: Request):
     """Render the todo.html template."""
-    return templates.TemplateResponse(
-        "todo.html",
-        {"request": request},
-    )
+
+    # ✅ Lazy-load Jinja2Templates inside the function
+    # from fastapi.templating import Jinja2Templates
+    templates = Jinja2Templates(directory=str(HERE / "templates"))
+
+    return templates.TemplateResponse("todo.html", {"request": request})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
