@@ -84,6 +84,11 @@ def render_login_page(request: Request):
     )
 
 
+@router.get("/register-page")
+def render_register_page(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Authentication helpers
 # ──────────────────────────────────────────────────────────────────────────────
