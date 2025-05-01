@@ -10,17 +10,13 @@ from jose import jwt, JWTError
 
 from ..database import SessionLocal
 from ..models import Todos
-from .auth import SECRET_KEY, ALGORITHM
+from .auth import get_current_user, SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/todos", tags=["todos"])
 
-# one-time template setup (runtime safe)
-HERE = Path(__file__).parent.parent
-from fastapi.templating import (
-    Jinja2Templates,
-)  # top‐level import is fine, needs jinja2 installed
-
-templates = Jinja2Templates(directory=str(HERE / "templates"))
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependencies
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def get_db():
@@ -31,30 +27,34 @@ def get_db():
         db.close()
 
 
-db_dep = Annotated[Session, Depends(get_db)]
-
-
-def redirect_to_login():
-    r = RedirectResponse("/auth/login-page", status_code=status.HTTP_302_FOUND)
-    r.delete_cookie("access_token")
-    return r
-
-
 def get_user_from_cookie(request: Request):
     token = request.cookies.get("access_token")
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        data = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return {
-            "username": payload["sub"],
-            "id": payload["id"],
-            "user_role": payload["role"],
+            "username": data.get("sub"),
+            "id": data.get("id"),
+            "user_role": data.get("role"),
         }
     except JWTError:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
 
 
+# Expose get_current_user and get_db for tests and API routes
+user_dependency = Annotated[dict, Depends(get_current_user)]
+db_dependency = Annotated[Session, Depends(get_db)]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Data models
+# ──────────────────────────────────────────────────────────────────────────────
 class TodoRequest(BaseModel):
     title: str = Field(min_length=3)
     description: str = Field(min_length=3, max_length=100)
@@ -62,9 +62,20 @@ class TodoRequest(BaseModel):
     complete: bool
 
 
-# ─────────────────────────────────────────────────────────────
-# Page Routes
-# ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def redirect_to_login():
+    resp = RedirectResponse("/auth/login-page", status_code=status.HTTP_302_FOUND)
+    resp.delete_cookie("access_token")
+    return resp
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Page Routes (lazy-load Jinja2Templates)
+# ──────────────────────────────────────────────────────────────────────────────
 @router.get("/todo-page", response_class=HTMLResponse)
 async def render_todo_page(request: Request, db: Session = Depends(get_db)):
     try:
@@ -73,8 +84,15 @@ async def render_todo_page(request: Request, db: Session = Depends(get_db)):
         return redirect_to_login()
 
     todos_list = db.query(Todos).filter(Todos.owner_id == user["id"]).all()
+
+    from fastapi.templating import Jinja2Templates
+
+    templates = Jinja2Templates(
+        directory=str(Path(__file__).parent.parent / "templates")
+    )
     return templates.TemplateResponse(
-        "todo.html", {"request": request, "todos": todos_list, "user": user}
+        "todo.html",
+        {"request": request, "todos": todos_list, "user": user},
     )
 
 
@@ -85,6 +103,11 @@ async def render_add_todo_page(request: Request):
     except HTTPException:
         return redirect_to_login()
 
+    from fastapi.templating import Jinja2Templates
+
+    templates = Jinja2Templates(
+        directory=str(Path(__file__).parent.parent / "templates")
+    )
     return templates.TemplateResponse(
         "add-todo.html", {"request": request, "user": user}
     )
@@ -103,17 +126,23 @@ async def render_edit_todo_page(
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found.")
 
+    from fastapi.templating import Jinja2Templates
+
+    templates = Jinja2Templates(
+        directory=str(Path(__file__).parent.parent / "templates")
+    )
     return templates.TemplateResponse(
-        "edit-todo.html", {"request": request, "todo": todo, "user": user}
+        "edit-todo.html",
+        {"request": request, "todo": todo, "user": user},
     )
 
 
-# ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 # JSON API Endpoints
-# ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 @router.get("/", status_code=status.HTTP_200_OK)
 async def read_all(
-    user: dict = Depends(get_user_from_cookie), db: Session = Depends(get_db)
+    user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     return db.query(Todos).filter(Todos.owner_id == user["id"]).all()
 
@@ -121,7 +150,7 @@ async def read_all(
 @router.get("/todo/{todo_id}", status_code=status.HTTP_200_OK)
 async def read_todo(
     todo_id: int,
-    user: dict = Depends(get_user_from_cookie),
+    user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     todo = (
@@ -138,7 +167,7 @@ async def read_todo(
 @router.post("/todo", status_code=status.HTTP_201_CREATED)
 async def create_todo(
     todo_request: TodoRequest,
-    user: dict = Depends(get_user_from_cookie),
+    user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     todo = Todos(**todo_request.model_dump(), owner_id=user["id"])
@@ -151,7 +180,7 @@ async def create_todo(
 async def update_todo(
     todo_id: int,
     todo_request: TodoRequest,
-    user: dict = Depends(get_user_from_cookie),
+    user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     todo = (
@@ -162,15 +191,15 @@ async def update_todo(
     )
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found.")
-    for attr, val in todo_request.model_dump().items():
-        setattr(todo, attr, val)
+    for k, v in todo_request.model_dump().items():
+        setattr(todo, k, v)
     db.commit()
 
 
 @router.delete("/todo/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_todo(
     todo_id: int,
-    user: dict = Depends(get_user_from_cookie),
+    user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     deleted = (
