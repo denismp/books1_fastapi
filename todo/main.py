@@ -1,39 +1,37 @@
 # todo/main.py
 from fastapi import FastAPI, Request, status
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
-from todo import models
-from todo.database import engine
-from todo.routers import auth, todos, admin, users
+from .models import Base
+from .database import engine
+from .routers import auth, todos, admin, users
 
 app = FastAPI()
-models.Base.metadata.create_all(bind=engine)
 
-# Static files
-HERE = Path(__file__).parent
-static_path = HERE / "static"
-app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
+Base.metadata.create_all(bind=engine)
+
+# resolve the directory that actually exists
+BASE_DIR = Path(__file__).resolve().parent
+
+app.mount(
+    "/static",
+    StaticFiles(directory=BASE_DIR / "static"),
+    name="static",
+)
 
 
-# Templates (deferred for runtime to avoid import issues in tests)
-def get_templates():
-    return Jinja2Templates(directory=str(HERE / "templates"))
-
-
-@app.get("/", response_class=HTMLResponse)
-def root_redirect(request: Request):
+@app.get("/")
+def root(request: Request):
     return RedirectResponse(url="/todos/todo-page", status_code=status.HTTP_302_FOUND)
 
 
-@app.get("/healthy", response_class=HTMLResponse)
-def health_check(request: Request):
+@app.get("/healthy")
+def health_check():
     return {"status": "Healthy"}
 
 
-# Routers
 app.include_router(auth.router)
 app.include_router(todos.router)
 app.include_router(admin.router)
